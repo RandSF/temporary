@@ -114,8 +114,8 @@ class BlurHandNet(nn.Module):
                                 self.coord_loss(joint_cam_all[IDX_P], targets['joint_cam_past'][None], meta_info['joint_valid_past'][None]) + \
                                 self.coord_loss(joint_cam_all[IDX_F], targets['joint_cam_future'][None], meta_info['joint_valid_future'][None]) # [K, B, J, 3]
                 loss_joint_cam = loss_joint_cam.mean([-1, -2])  # [K, B]
-                idx = torch.argsort(loss_joint_cam, dim=0)  # [K, B]
-                idx = idx.unsqueeze(0).repeat(T, 1, 1)  # [T, K, B]
+                idx_org = torch.argsort(loss_joint_cam, dim=0)  # [K, B]
+                idx = idx_org.unsqueeze(0).repeat(T, 1, 1)  # [T, K, B]
             joint_proj = torch.gather(joint_proj_all, index=idx[...,None,None].repeat(1,1,1, J, 2), dim=1)[:,:self.k_use]
             joint_cam = torch.gather(joint_cam_all, index=idx[...,None,None].repeat(1,1,1, J, 3), dim=1)[:,:self.k_use]
             mesh_cam = torch.gather(mesh_cam_all, index=idx[...,None,None].repeat(1,1,1, 778, 3), dim=1)[:,:self.k_use]
@@ -160,7 +160,9 @@ class BlurHandNet(nn.Module):
 
             # 3) diversity promoting loss
             # loss['diversity'] = self.opt_loss['lambda_diversity'] * self.d_loss(feat_mano)
-            loss['diversity'] = self.opt_loss['lambda_diversity'] * self.info_nce(feat_blur.detach(), mano_pose_all)
+            loss_d, rank = self.info_nce(feat_blur.detach(), mano_pose_all, idx_org)
+            loss['diversity'] = self.opt_loss['lambda_diversity'] * loss_d
+            loss['rank_first'] = rank
             # choose the best sample according to current MPJPE
 
             rm_info = {}
