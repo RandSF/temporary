@@ -12,7 +12,7 @@ from .t_cond_mlp import (
     normalization_layer,
 )
 # from .vit import Attention, FeedForward
-
+from timm.layers import trunc_normal_
 
 def exists(val):
     return val is not None
@@ -327,6 +327,7 @@ class TransformerDecoder(nn.Module):
                 )
 
         self.pos_embedding = nn.Parameter(torch.randn(1, num_tokens, dim))
+        trunc_normal_(self.pos_embedding, std=0.02) # new line here
         if emb_dropout_type == "drop":
             self.dropout = DropTokenDropout(emb_dropout)
         elif emb_dropout_type == "zero":

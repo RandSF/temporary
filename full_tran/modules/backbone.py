@@ -13,11 +13,11 @@ def create_backbone(cfg):
     if cfg['backbone']['type'] == 'vit':
         return vit(cfg)
     else:
-        raise NotImplementedError(f'Backbone type `{cfg['backbone']['type']}` is not implemented')
+        raise NotImplementedError('Backbone type `{}` is not implemented'.format(cfg['backbone']['type']))
 
 def vit(cfg):
     return ViT(
-                img_size=(256, 192),
+                img_size=(256, 192),    #  no need to change 256x192 to 256x256
                 patch_size=16,
                 embed_dim=1280,
                 depth=32,
@@ -29,7 +29,7 @@ def vit(cfg):
                 drop_path_rate=0.55,
             )
 
-def get_abs_pos(abs_pos, h, w, ori_h, ori_w, has_cls_token=True):
+def get_abs_pos(abs_pos, h, w, ori_h, ori_w, has_cls_token=True, return_cls_token=False):
     """
     Calculate absolute positional embeddings. If needed, resize embeddings and remove cls_token
         dimension for the original embeddings.
@@ -44,7 +44,8 @@ def get_abs_pos(abs_pos, h, w, ori_h, ori_w, has_cls_token=True):
     cls_token = None
     B, L, C = abs_pos.shape
     if has_cls_token:
-        cls_token = abs_pos[:, 0:1]
+        if return_cls_token:
+            cls_token = abs_pos[:, 0:1]
         abs_pos = abs_pos[:, 1:]
 
     if ori_h != h or ori_w != w:
@@ -170,8 +171,7 @@ class PatchEmbed(nn.Module):
         self.img_size = img_size
         self.patch_size = patch_size
         self.num_patches = num_patches
-        from timm.models.vision_transformer import PatchEmbed
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=(patch_size[0] // ratio)) # it does not need padding in our setting
+        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=(patch_size[0] // ratio), padding=4 + 2 * (ratio//2-1))
 
     def forward(self, x, **kwargs):
         B, C, H, W = x.shape
@@ -329,8 +329,10 @@ class ViT(nn.Module):
 
         if self.pos_embed is not None:
             # fit for multiple GPU training
+            # to fit the pretrain ViTPose in resolution of 256x192
+            pos_embed = get_abs_pos(self.pos_embed, h=Hp, w=Wp, ori_h=16, ori_w=12)
             # since the first element for pos embed (sin-cos manner) is zero, it will cause no difference
-            x = x + self.pos_embed[:, 1:] + self.pos_embed[:, :1]
+            x = x + pos_embed#[:, 1:] + pos_embed[:, :1]
 
         for blk in self.blocks:
             if self.use_checkpoint:
@@ -352,3 +354,4 @@ class ViT(nn.Module):
         """Convert the model into training mode."""
         super().train(mode)
         self._freeze_stages()
+

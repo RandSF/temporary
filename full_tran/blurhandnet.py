@@ -1,6 +1,5 @@
 from full_tran.modules.hamer import HAMER
-from models_deformer.modules.layer_utils import init_weights
-from losses import CoordLoss, ParamLoss, CoordLossOrderInvariant, DiversityLoss
+from losses import CoordLoss, ParamLoss, CoordLossOrderInvariant
 from utils.MANO import mano
 
 import math
@@ -17,7 +16,7 @@ class BlurHandNet(nn.Module):
 
         # weight initialization
         if weight_init:
-            self.hamer.apply(init_weights)
+            self.hamer.init_weights()
 
         # for producing 3d hand meshs
         self.mano_layer_right = copy.deepcopy(mano.layer['right']).cuda()
@@ -61,11 +60,13 @@ class BlurHandNet(nn.Module):
         joint_proj, joint_cam, mesh_cam = \
             self.get_coord(mano_pose[...,:3], mano_pose[...,3:], mano_shape, cam_tran) # [B, K, T, ...]
 
+        del cam_param, cam_tran
+        torch.cuda.empty_cache()
         if mode == 'train':
             loss = {}
 
-            joint_cam = joint_cam.reshape(B, K, T, J, 3).transpose(0, 2)    # [T, K, B, ...]
-            joint_proj = joint_proj.reshape(B, K, T, J, 2).transpose(0, 2)
+            joint_cam = joint_cam.transpose(0, 2)    # [T, K, B, ...]
+            joint_proj = joint_proj.transpose(0, 2)
             mano_pose = mano_pose.transpose(0, 2)
             mano_shape = mano_shape.transpose(0, 2)
 
@@ -113,7 +114,7 @@ class BlurHandNet(nn.Module):
             # diversity promoting loss
             # loss['diversity'] = self.opt_loss['lambda_diversity'] * self.d_loss(feat_mano)
 
-            return loss
+            return loss, {}
         else:
             out = {}
             out['img'] = inputs['img']

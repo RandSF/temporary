@@ -1,6 +1,7 @@
+import os
 import torch
 import torch.nn as nn
-from typing import Any, Dict, Mapping, Tuple
+from typing import Dict, Union
 
 from .backbone import create_backbone
 from .mano_head import build_mano_head
@@ -19,22 +20,29 @@ class HAMER(nn.Module):
         self.cfg = cfg
         # Create backbone feature extractor
         self.backbone = create_backbone(cfg)
-
+        res = self.load_pretrain()
+        assert res
         # Create MANO head
         self.mano_head = build_mano_head(cfg)
 
     def init_weights(self):
-        self.backbone.init_weights()
         self.mano_head.init_weights()
 
     def load_pretrain(self):
         if self.cfg['backbone'].get('pretrained_weights', None):
             # log.info(f'Loading backbone weights from {cfg.MODEL.BACKBONE.PRETRAINED_WEIGHTS}')
-            self.backbone.load_state_dict(torch.load(self.cfg['backbone']['pretrained_weights'], map_location='cpu')['state_dict'])
+            ckpt = torch.load(os.path.dirname(__file__) + self.cfg['backbone']['pretrained_weights'], map_location='cpu')['state_dict']
+            pop_key_list = []
+            for k in ckpt.keys():   # we do not use keypoint layers
+                if 'keypoint_head' in k:
+                    pop_key_list.append(k)
+            for k in pop_key_list:
+                ckpt.pop(k, None)
+            self.load_state_dict(ckpt)
             return True
         return False
 
-    def forward_step(self, img: torch.Tensor) -> Dict:
+    def forward_step(self, img: torch.Tensor, train=False) -> Union[torch.Tensor]:
         """
         Run a forward step of the network
         img: [B, 3, 256, 256]
@@ -42,13 +50,14 @@ class HAMER(nn.Module):
 
         # Use RGB image as input
         x = img
-        batch_size = x.shape[0]
+        # batch_size = x.shape[0]
 
         # Compute conditioning features using the backbone
         conditioning_feats = self.backbone(x)   # [B, L, E]
 
-        pred_mano_params, pred_cam, _ = self.mano_head(conditioning_feats)  # [B, K, T, -1]
-        return pred_mano_params, pred_cam
+        pred_hand_pose, pred_betas, pred_cam = self.mano_head(conditioning_feats)  # [B, K, T, -1]
+
+        return pred_hand_pose, pred_betas, pred_cam
         # Store useful regression outputs to the output dict
         output = {}
         output['pred_cam'] = pred_cam
@@ -82,7 +91,7 @@ class HAMER(nn.Module):
         output['pred_keypoints_2d'] = pred_keypoints_2d.reshape(batch_size, -1, 2)
         return output
 
-    def forward(self, batch: Dict) -> Dict:
+    def forward(self, img: torch.Tensor) -> Dict:
         """
         Run a forward step of the network in val mode
         Args:
@@ -90,4 +99,4 @@ class HAMER(nn.Module):
         Returns:
             Dict: Dictionary containing the regression output
         """
-        return self.forward_step(batch, train=False)
+        return self.forward_step(img, train=False)
