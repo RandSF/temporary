@@ -1,0 +1,71 @@
+name: BlurHandNet_BH
+num_gpus: 2  # if you want to set num_gpus as 1, increase the batch_size to 48
+num_threads: 16
+manual_seed: 4543
+
+# task related parameters
+task_parameters:
+  num_k: 4
+  num_timestep: 3
+  num_joints: 21
+  input_img_shape: [256, 256]
+  output_hm_shape: [32, 32, 32]
+  camera_3d_size: 0.4
+  bbox_3d_size: 0.3
+  focal: [5000, 5000]  # virtual focal lengths
+  princpt: [128, 128]  # virtual principal point position
+  
+# dataset list
+dataset_list:
+  dataset1:  # can be arbitrary
+    name: BlurHand
+    img_path: datasets/BlurHand/blur_images
+    annot_path: datasets/BlurHand/annotations
+    is_3d: True
+  # dataset2 ...
+  
+# network structures
+network:
+  backbone:
+    resnet_type: 50
+
+  unfolder:
+    in_chans: 2048
+    out_chans: 256
+
+  transformer:
+    in_chans: 256
+    embed_dim: 256
+    num_blocks: 4
+    num_heads: 4
+
+  regressor:
+    input_dim: 256
+    hiddens: 1024
+    num_layer: 4
+    num_block: 2
+
+# training configurations
+train:
+  batch_size: 24
+  gen_end_epoch: 13
+
+  optim:
+    lr: !!float 1e-4
+    lr_dec_epoch: [11, 13] 
+    lr_dec_factor: !!float 10
+
+  loss:
+    nll: 0.01
+    joint_img: 0.1
+    diversity: 0.0
+    mode: 
+      joint_cam: 10
+      joint_proj: 0.05
+      mano_pose: 1
+      mano_shape: 0.3
+    sample: 
+      joint_cam: 10
+      joint_proj: 0.05
+      mano_param: 1
+      mano_shape: 0.3
